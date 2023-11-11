@@ -1,5 +1,8 @@
 // This function initializes WebGPU and sets up the particle system.
 async function initWebGPU() {
+    const x_text = document.getElementById("x-axis");
+    const y_text = document.getElementById("y-axis");
+
     if (!navigator.gpu) {
         alert("WebGPU is not supported by this browser.");
         return;
@@ -95,24 +98,36 @@ async function initWebGPU() {
 
     // Animation loop
     function updateParticles() {
+        const boundary = 1;
         for (let i = 0; i < numParticles; i++) {
             particlePositions[i * 2] += particleVelocities[i * 2]; // Update x position
             particlePositions[i * 2 + 1] += particleVelocities[i * 2 + 1]; // Update y position
-        }
+            if (Math.abs(particlePositions[i * 2]) > boundary){
+                particleVelocities[i * 2] *= -1;
+                particlePositions[i * 2] = Math.sign(particlePositions[i*2]) * boundary;
+            } 
+            
+            if (Math.abs(particlePositions[i * 2 + 1]) > boundary){
+                particleVelocities[i * 2 + 1] *= -1;
+                particlePositions[i * 2 + 1] = Math.sign(particlePositions[ i * 2 + 1]) * boundary;
+            } 
 
-        // Copy the updated positions back to the GPU buffer
-        device.queue.writeBuffer(
-            particleBuffer,
-            0,
-            particlePositions.buffer,
-            particlePositions.byteOffset,
-            particlePositions.byteLength
-        );
+
+            // Copy the updated positions back to the GPU buffer
+            device.queue.writeBuffer(
+                particleBuffer,
+                0,
+                particlePositions.buffer,
+                particlePositions.byteOffset,
+                particlePositions.byteLength
+            );
+        }
     }
 
     function render() {
         updateParticles();
-
+        x_text.innerText = particlePositions[0];
+        y_text.innerText = particlePositions[1];
         const commandEncoder = device.createCommandEncoder();
         const textureView = context.getCurrentTexture().createView();
         const renderPassDescriptor = {
