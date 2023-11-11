@@ -1,7 +1,21 @@
 // This function initializes WebGPU and sets up the particle system.
 async function initWebGPU() {
-    const x_text = document.getElementById("x-axis");
-    const y_text = document.getElementById("y-axis");
+    const x_axis = document.getElementById("x-axis");
+    const y_axis = document.getElementById("y-axis");
+    const x_text = document.getElementById("x-text");
+    const y_text = document.getElementById("y-text");
+    let posX;
+    let posY;
+
+
+    function getMousePos(canvas, event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }
+    
 
     if (!navigator.gpu) {
         alert("WebGPU is not supported by this browser.");
@@ -14,6 +28,17 @@ async function initWebGPU() {
 
     // Get the canvas and context
     const canvas = document.getElementById("webgpuCanvas");
+
+    canvas.addEventListener('mousemove', function(event) {
+        const mousePos = getMousePos(canvas, event);
+        posX = mousePos.x;
+        posY = mousePos.y;
+    
+        // Do something with posX and posY
+        x_axis.innerText = "X: " + (posX-250)/250;
+        y_axis.innerText = "Y: " + (posY-250)/250;
+    });
+
     const context = canvas.getContext("webgpu");
 
     // Configure the context
@@ -50,15 +75,19 @@ async function initWebGPU() {
 
     // Create buffers for particles
     // Initial positions and velocities for the particles
-    const numParticles = 2000;
+    const numParticles = 5000;
     let particlePositions = new Float32Array(numParticles * 2); // x, y for each particle
     let particleVelocities = new Float32Array(numParticles * 2); // vx, vy for each particle
 
     for (let i = 0; i < numParticles; i++) {
         particlePositions[i * 2] = (Math.random() * 2 - 1) * canvas.width / canvas.height; // x
         particlePositions[i * 2 + 1] = (Math.random() * 2 - 1); // y
-        particleVelocities[i * 2] = (Math.random() - 0.5) * 0.02; // vx
-        particleVelocities[i * 2 + 1] = (Math.random() - 0.5) * 0.02; // vy
+        
+        particleVelocities[i * 2] = (Math.random() - 0.5) * 0.002; // vx
+        particleVelocities[i * 2 + 1] = (Math.random() - 0.5) * 0.002; // vy
+
+        // particleVelocities[i * 2] = 0; // vx
+        // particleVelocities[i * 2 + 1] = 0; // vy
     }
 
     // Create GPU buffers
@@ -99,35 +128,60 @@ async function initWebGPU() {
     // Animation loop
     function updateParticles() {
         const boundary = 1;
+        //const gravity = -0.001;
+        const mouseInfluenceRadius = 0.1; // Adjust this value as needed
+        const mouseInfluenceFactor = 0.01; // Adjust this value as needed
+
         for (let i = 0; i < numParticles; i++) {
+            //particleVelocities[i * 2 + 1] += gravity;
             particlePositions[i * 2] += particleVelocities[i * 2]; // Update x position
             particlePositions[i * 2 + 1] += particleVelocities[i * 2 + 1]; // Update y position
             if (Math.abs(particlePositions[i * 2]) > boundary){
                 particleVelocities[i * 2] *= -1;
-                particlePositions[i * 2] = Math.sign(particlePositions[i*2]) * boundary;
+                //particlePositions[i * 2] = Math.sign(particlePositions[i*2]) * boundary;
+                
             } 
             
             if (Math.abs(particlePositions[i * 2 + 1]) > boundary){
                 particleVelocities[i * 2 + 1] *= -1;
-                particlePositions[i * 2 + 1] = Math.sign(particlePositions[ i * 2 + 1]) * boundary;
+                if (i == 0){
+                    console.log("hit");
+                }
+                //particlePositions[i * 2 + 1] = Math.sign(particlePositions[ i * 2 + 1]) * boundary;
             } 
 
+            let dx = (posX-250)/250 - particlePositions[i * 2];
+            let dy = (posY-250)/250 - particlePositions[i * 2 + 1];
+            let distanceToMouse = Math.sqrt(dx * dx + dy * dy);
 
-            // Copy the updated positions back to the GPU buffer
-            device.queue.writeBuffer(
-                particleBuffer,
-                0,
-                particlePositions.buffer,
-                particlePositions.byteOffset,
-                particlePositions.byteLength
-            );
+            if (distanceToMouse < mouseInfluenceRadius) {
+                particleVelocities[i * 2] += dx * mouseInfluenceFactor;
+                particleVelocities[i * 2 + 1] += dy * mouseInfluenceFactor;
+
+            }
+            // if (particlePositions[i * 2] > ((posX-250)/250 - 0.01)){
+            //     particleVelocities[i * 2] += 0.003;
+            //     particleVelocities[i * 2 + 1] += 0.003;
+            // }
         }
+
+        // Copy the updated positions back to the GPU buffer
+        device.queue.writeBuffer(
+            particleBuffer,
+            0,
+            particlePositions.buffer,
+            particlePositions.byteOffset,
+            particlePositions.byteLength
+        );
+        
     }
 
     function render() {
         updateParticles();
+        //const start = performance.now();
         x_text.innerText = particlePositions[0];
         y_text.innerText = particlePositions[1];
+        
         const commandEncoder = device.createCommandEncoder();
         const textureView = context.getCurrentTexture().createView();
         const renderPassDescriptor = {
@@ -148,6 +202,8 @@ async function initWebGPU() {
         device.queue.submit([commandEncoder.finish()]);
 
         requestAnimationFrame(render);
+        //const end = performance.now();
+        //frame.innerText = (end - start)*100000;
     }
 
     requestAnimationFrame(render);
